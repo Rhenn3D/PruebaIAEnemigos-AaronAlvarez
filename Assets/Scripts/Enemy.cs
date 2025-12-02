@@ -1,4 +1,6 @@
-using System;
+using System.Diagnostics;
+using NUnit.Framework;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -7,6 +9,15 @@ public class Enemy : MonoBehaviour
     private NavMeshAgent _enemyAgent;
 
     [SerializeField] private Transform[] _patrolPoints;
+
+    Transform _player;
+    [SerializeField] private float _detectgionRange = 5;
+    private float _searchTimer;
+    [SerializeField] private float _searchWaitTime = 15;
+    [SerializeField] private float _searchRadius = 6;
+    Vector3 _playerLastPositionKnown;
+
+    [SerializeField] private float _detectionAngle = 90;
 
     public enum EnemyState
     {
@@ -26,10 +37,12 @@ public class Enemy : MonoBehaviour
     void Awake()
     {
         _enemyAgent = GetComponent<NavMeshAgent>();
+        _player = GameObject.FindWithTag("Player").transform;
     }
     void Start()
     {
-        
+        currentState = EnemyState.Patrolling;
+        SetRandomPatrolPoints();
     }
 
     
@@ -57,17 +70,120 @@ public class Enemy : MonoBehaviour
 
     void Patrol()
     {
-        
+
+        if(OnRange())
+        {
+            currentState = EnemyState.Chasing;
+        }
+        if(_enemyAgent.remainingDistance < 0.5f)
+        {
+            SetRandomPatrolPoints();
+        }
     }
 
 
     void Chase()
     {
-        
+        if(!OnRange())
+        {
+            currentState = EnemyState.Searching;
+        }
+
+        _enemyAgent.SetDestination(_player.position);
+        _playerLastPositionKnown = _player.position;
     }
 
     void Search()
     {
-        
+        if(OnRange())
+        {
+            currentState = EnemyState.Chasing;
+        }
+        _searchTimer += Time.deltaTime;
+
+        if(_searchTimer < _searchWaitTime)
+        {
+            if(_enemyAgent.remainingDistance < 0.5f)
+            {
+                Vector3 randomPoint;
+                if(RandomSearchPoint(_playerLastPositionKnown, _searchRadius, out randomPoint))
+                {
+                    _enemyAgent.SetDestination(randomPoint);
+                }
+            }
+        }
+        else
+        {
+            currentState = EnemyState.Patrolling;
+            _searchTimer = 0;
+        }
+    }
+
+    bool RandomSearchPoint(Vector3 center, float radius, out Vector3 point)
+    {
+        Vector3 randomPoint = center + Random.insideUnitSphere * radius;
+
+        NavMeshHit hit;
+        if(NavMesh.SamplePosition(randomPoint, out hit, 4, NavMesh.AllAreas))
+        {
+            point = hit.position;
+            return true;
+        }
+
+        point = Vector3.zero;
+        return false;
+    }
+
+    void SetRandomPatrolPoints()
+    {
+        _enemyAgent.SetDestination(_patrolPoints[Random.Range(0, _patrolPoints.Length)].position);
+    }
+
+    void OnDrawGizmos()
+    {
+        Gizmos.color = Color.blue;
+        foreach (Transform point in _patrolPoints)
+        {
+            Gizmos.DrawWireSphere(point.position, 0.3f);
+        }
+
+        Gizmos.color = Color.green;
+        Gizmos.DrawWireSphere(transform.position, 0.5f);
+
+
+        Gizmos.color = Color.yellow;
+
+        Vector3 fovLine1 = Quaternion.AngleAxis(_detectionAngle * 0.5f, transform.up) * transform.forward * _detectgionRange;
+        Vector3 fovLine2 = Quaternion.AngleAxis(-_detectionAngle * 0.5f, transform.up) * transform.forward * _detectgionRange;
+
+        Gizmos.DrawLine(transform.position, transform.position + fovLine1);
+        Gizmos.DrawLine(transform.position, transform.position + fovLine2);
+    }
+
+    bool OnRange()
+    {
+        /*if(Vector3.Distance(transform.position, _player.position) < _detectgionRange)
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }*/
+
+        Vector3 directionToPlayer = _player.position - transform.position;
+        float angleToPlayer = Vector3.Angle(transform.forward, directionToPlayer);
+        float distanceToPlayer = Vector3.Distance(transform.position, _player.position);
+
+        if(distanceToPlayer > _detectgionRange)
+        {
+            return false;
+        }
+
+        if(angleToPlayer > _detectionAngle * 0.5f)
+        {
+            return false;
+        }
+        return true;
     }
 }
