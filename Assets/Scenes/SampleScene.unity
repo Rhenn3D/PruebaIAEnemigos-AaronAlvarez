@@ -4508,7 +4508,7 @@ Transform:
   m_GameObject: {fileID: 396435522}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 12.98, y: 9.05, z: -6.1800003}
+  m_LocalPosition: {x: 12.98, y: 9.05, z: 17.59}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -13167,8 +13167,12 @@ MonoBehaviour:
   - {fileID: 696615206}
   - {fileID: 1105362011}
   - {fileID: 1731513216}
-  _detectgionRange: 5
-  _searchWaitTime: 15
+  _waitTimeAtPoint: 5
+  _detectionRange: 6
+  _detectionAngle: 90
+  _attackRange: 1.8
+  _attackCooldown: 1.5
+  _searchTime: 6
   _searchRadius: 6
   currentState: 0
 --- !u!195 &1292099434
@@ -13278,7 +13282,7 @@ Transform:
   m_GameObject: {fileID: 1292099432}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 13.658451, y: -8.67742, z: 2.8800244}
+  m_LocalPosition: {x: 9.32, y: -8.67742, z: -1.17}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

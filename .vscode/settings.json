@@ -66,5 +66,5 @@
     "explorer.fileNesting.patterns": {
         "*.sln": "*.csproj"
     },
-    "dotnet.defaultSolution": "PruebaIAEnemigos.sln"
+    "dotnet.defaultSolution": "PruebaIAEnemigos-AaronAlvarez.sln"
 }

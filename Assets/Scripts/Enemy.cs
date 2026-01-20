@@ -1,6 +1,3 @@
-using System.Diagnostics;
-using NUnit.Framework;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -8,182 +5,222 @@ public class Enemy : MonoBehaviour
 {
     private NavMeshAgent _enemyAgent;
 
+    [Header("Patrol")]
     [SerializeField] private Transform[] _patrolPoints;
+    private int _currentPatrolIndex;
+    [SerializeField] private float _waitTimeAtPoint = 5f;
+    private float _waitTimer;
 
-    Transform _player;
-    [SerializeField] private float _detectgionRange = 5;
+    [Header("Detection")]
+    private Transform _player;
+    [SerializeField] private float _detectionRange = 6f;
+    [SerializeField] private float _detectionAngle = 90f;
+
+    [Header("Attack")]
+    [SerializeField] private float _attackRange = 1.8f;
+    [SerializeField] private float _attackCooldown = 1.5f;
+    private float _attackTimer;
+
+    [Header("Searching")]
+    [SerializeField] private float _searchTime = 6f;
+    [SerializeField] private float _searchRadius = 5f;
     private float _searchTimer;
-    [SerializeField] private float _searchWaitTime = 15;
-    [SerializeField] private float _searchRadius = 6;
-    Vector3 _playerLastPositionKnown;
-
-    [SerializeField] private float _detectionAngle = 90;
+    private Vector3 _lastPlayerPosition;
 
     public enum EnemyState
     {
         Patrolling,
-
+        Waiting,
         Chasing,
-
-        Searching
+        Searching,
+        Attacking
     }
 
     public EnemyState currentState;
-
-    
-
-
 
     void Awake()
     {
         _enemyAgent = GetComponent<NavMeshAgent>();
         _player = GameObject.FindWithTag("Player").transform;
     }
+
     void Start()
     {
         currentState = EnemyState.Patrolling;
-        SetRandomPatrolPoints();
+        _currentPatrolIndex = 0;
+        SetNextPatrolPoint();
     }
 
-    
     void Update()
     {
         switch (currentState)
         {
             case EnemyState.Patrolling:
                 Patrol();
-            break;
+                break;
+
+            case EnemyState.Waiting:
+                Waiting();
+                break;
 
             case EnemyState.Chasing:
                 Chase();
-            break;
+                break;
 
             case EnemyState.Searching:
                 Search();
-            break;
+                break;
+
+            case EnemyState.Attacking:
+                Attack();
+                break;
 
             default:
                 Patrol();
-            break;
+                break;
         }
     }
+
+    
 
     void Patrol()
     {
-
-        if(OnRange())
+        if (PlayerInSight())
         {
             currentState = EnemyState.Chasing;
+            return;
         }
-        if(_enemyAgent.remainingDistance < 0.5f)
+
+        if (_enemyAgent.remainingDistance <= 0.5f)
         {
-            SetRandomPatrolPoints();
+            currentState = EnemyState.Waiting;
+            _waitTimer = 0f;
         }
     }
 
+    void Waiting()
+    {
+        if (PlayerInSight())
+        {
+            currentState = EnemyState.Chasing;
+            return;
+        }
+
+        _waitTimer += Time.deltaTime;
+
+        if (_waitTimer >= _waitTimeAtPoint)
+        {
+            SetNextPatrolPoint();
+            currentState = EnemyState.Patrolling;
+        }
+    }
 
     void Chase()
     {
-        if(!OnRange())
+        _enemyAgent.SetDestination(_player.position);
+        _lastPlayerPosition = _player.position;
+
+        float distance = Vector3.Distance(transform.position, _player.position);
+
+        if (distance <= _attackRange)
+        {
+            currentState = EnemyState.Attacking;
+            _attackTimer = 0f;
+        }
+        else if (!PlayerInSight())
         {
             currentState = EnemyState.Searching;
+            _searchTimer = 0f;
+            _enemyAgent.SetDestination(_lastPlayerPosition);
         }
-
-        _enemyAgent.SetDestination(_player.position);
-        _playerLastPositionKnown = _player.position;
     }
 
     void Search()
     {
-        if(OnRange())
+        if (PlayerInSight())
         {
             currentState = EnemyState.Chasing;
+            return;
         }
+
         _searchTimer += Time.deltaTime;
 
-        if(_searchTimer < _searchWaitTime)
+        if (_enemyAgent.remainingDistance <= 0.5f)
         {
-            if(_enemyAgent.remainingDistance < 0.5f)
+            Vector3 randomPoint;
+            if (RandomPoint(_lastPlayerPosition, _searchRadius, out randomPoint))
             {
-                Vector3 randomPoint;
-                if(RandomSearchPoint(_playerLastPositionKnown, _searchRadius, out randomPoint))
-                {
-                    _enemyAgent.SetDestination(randomPoint);
-                }
+                _enemyAgent.SetDestination(randomPoint);
             }
         }
-        else
+
+        if (_searchTimer >= _searchTime)
         {
             currentState = EnemyState.Patrolling;
-            _searchTimer = 0;
+            SetNextPatrolPoint();
         }
     }
 
-    bool RandomSearchPoint(Vector3 center, float radius, out Vector3 point)
+    void Attack()
+    {
+        _enemyAgent.ResetPath();
+        _attackTimer += Time.deltaTime;
+
+        if (_attackTimer >= _attackCooldown)
+        {
+            Debug.Log("ENEMY ATTACK");
+
+            _attackTimer = 0f;
+            currentState = EnemyState.Chasing;
+        }
+    }
+
+    
+
+    void SetNextPatrolPoint()
+    {
+        if (_patrolPoints.Length == 0) return;
+
+        _enemyAgent.SetDestination(_patrolPoints[_currentPatrolIndex].position);
+
+        _currentPatrolIndex++;
+        if (_currentPatrolIndex >= _patrolPoints.Length)
+            _currentPatrolIndex = 0;
+    }
+
+    bool PlayerInSight()
+    {
+        Vector3 directionToPlayer = _player.position - transform.position;
+        float distance = directionToPlayer.magnitude;
+
+        if (distance > _detectionRange)
+            return false;
+
+        float angle = Vector3.Angle(transform.forward, directionToPlayer);
+        if (angle > _detectionAngle * 0.5f)
+            return false;
+
+        return true;
+    }
+
+    bool RandomPoint(Vector3 center, float radius, out Vector3 result)
     {
         Vector3 randomPoint = center + Random.insideUnitSphere * radius;
 
         NavMeshHit hit;
-        if(NavMesh.SamplePosition(randomPoint, out hit, 4, NavMesh.AllAreas))
+        if (NavMesh.SamplePosition(randomPoint, out hit, radius, NavMesh.AllAreas))
         {
-            point = hit.position;
+            result = hit.position;
             return true;
         }
 
-        point = Vector3.zero;
+        result = Vector3.zero;
         return false;
-    }
-
-    void SetRandomPatrolPoints()
-    {
-        _enemyAgent.SetDestination(_patrolPoints[Random.Range(0, _patrolPoints.Length)].position);
     }
 
     void OnDrawGizmos()
     {
-        Gizmos.color = Color.blue;
-        foreach (Transform point in _patrolPoints)
-        {
-            Gizmos.DrawWireSphere(point.position, 0.3f);
-        }
-
-        Gizmos.color = Color.green;
-        Gizmos.DrawWireSphere(transform.position, 0.5f);
-
-
-        Gizmos.color = Color.yellow;
-
-        Vector3 fovLine1 = Quaternion.AngleAxis(_detectionAngle * 0.5f, transform.up) * transform.forward * _detectgionRange;
-        Vector3 fovLine2 = Quaternion.AngleAxis(-_detectionAngle * 0.5f, transform.up) * transform.forward * _detectgionRange;
-
-        Gizmos.DrawLine(transform.position, transform.position + fovLine1);
-        Gizmos.DrawLine(transform.position, transform.position + fovLine2);
-    }
-
-    bool OnRange()
-    {
-        /*if(Vector3.Distance(transform.position, _player.position) < _detectgionRange)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }*/
-
-        Vector3 directionToPlayer = _player.position - transform.position;
-        float angleToPlayer = Vector3.Angle(transform.forward, directionToPlayer);
-        float distanceToPlayer = Vector3.Distance(transform.position, _player.position);
-
-        if(distanceToPlayer > _detectgionRange)
-        {
-            return false;
-        }
-
-        if(angleToPlayer > _detectionAngle * 0.5f)
-        {
-            return false;
-        }
-        return true;
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, _attackRange);
     }
 }
